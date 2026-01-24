@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>404號星際站 - AI 專題</title>
+    <style>
+        :root { --main-cyan: #00ffcc; --bg-dark: #0d1117; }
+        body {
+            background-color: var(--bg-dark);
+            color: var(--main-cyan);
+            font-family: 'Courier New', monospace;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            transition: 0.5s;
+        }
+       
+        /* 商店裝修 - 霓虹紫主題 */
+        body.theme-purple { --main-cyan: #ff00ff; --bg-dark: #1a001a; }
+
+
+        /* 紅光閃爍動畫 */
+        @keyframes neon-red-flash {
+            0% { background-color: #0d1117; box-shadow: inset 0 0 20px #ff0000; }
+            50% { background-color: #330000; box-shadow: inset 0 0 60px #ff0000; }
+            100% { background-color: #0d1117; box-shadow: inset 0 0 20px #ff0000; }
+        }
+
+
+        .danger-mode {
+            animation: neon-red-flash 0.6s infinite;
+            --main-cyan: #ff4444 !important;
+        }
+
+
+        #status-bar { width: 800px; padding: 10px; border-bottom: 2px solid var(--main-cyan); display: flex; justify-content: space-between; font-size: 18px; }
+        .nav-buttons { margin: 10px 0; }
+        button.nav-btn { background: #000; border: 2px solid var(--main-cyan); color: var(--main-cyan); padding: 5px 12px; cursor: pointer; margin: 0 5px; font-weight: bold; }
+        button.nav-btn:hover { background: var(--main-cyan); color: black; }
+
+
+        #main-container { width: 800px; height: 450px; border: 4px solid #444; position: relative; background: #000; }
+       
+        .panel { width: 100%; height: 100%; display: none; position: absolute; top: 0; left: 0; background: #000; box-sizing: border-box; overflow-y: auto; padding: 20px; }
+        .active { display: block !important; z-index: 10; }
+       
+        #chat-panel { display: flex; flex-direction: column; padding: 10px; }
+        #chat-box { flex-grow: 1; height: 280px; overflow-y: auto; border: 1px solid #333; padding: 10px; margin-bottom: 10px; background: rgba(0,0,0,0.8); }
+        .input-area { display: flex; gap: 5px; }
+        #player-input { flex-grow: 1; background: #222; border: 1px solid var(--main-cyan); color: white; padding: 10px; }
+
+
+        .shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; text-align: left; }
+        .shop-item { border: 1px dashed var(--main-cyan); padding: 10px; }
+
+
+        canvas { display: block; background: #111; }
+        .npc-msg { color: #ffcc00; margin-bottom: 10px; }
+        .player-msg { color: #fff; text-align: right; margin-bottom: 10px; }
+        #battle-ui { position: absolute; top: 10px; left: 10px; color: white; pointer-events: none; z-index: 20; }
+    </style>
+</head>
+<body>
+
+
+<div id="status-bar">
+    <div>$ <span id="money-val">1000</span> | 💊x<span id="kit-val">0</span> | 🛡️x<span id="shd-val">0</span></div>
+    <div>站台等級: <span id="level-val">1</span> | 砲塔: <span id="turret-val">無</span></div>
+</div>
+
+
+<div class="nav-buttons">
+    <button class="nav-btn" onclick="showPanel('chat-panel')">(Q) 對話</button>
+    <button class="nav-btn" onclick="showPanel('inventory-panel')">(B) 背包</button>
+    <button class="nav-btn" onclick="showPanel('shop-panel')">(S) 商店</button>
+    <button class="nav-btn" onclick="showPanel('weapon-panel')">(X) 武器</button>
+</div>
+
+
+<div id="main-container">
+    <div id="chat-panel" class="panel active">
+        <div id="chat-box"><div class="npc-msg">系統：歡迎回到 404 號站。</div></div>
+        <div class="input-area">
+            <input type="text" id="player-input" placeholder="對話或輸入 '新聞'..." onkeypress="if(event.key==='Enter') talkToGemini()">
+            <button class="nav-btn" onclick="talkToGemini()">發送</button>
+        </div>
+    </div>
+
+
+    <div id="shop-panel" class="panel">
+        <h2>--- 星際擴充商店 ---</h2>
+        <div class="shop-grid">
+            <div class="shop-item">
+                <p>急救藥包 ($200)</p>
+                <button class="nav-btn" onclick="buyItem('kit')">購買 (戰鬥中按 H 回血)</button>
+            </div>
+            <div class="shop-item">
+                <p>防護罩插件 ($300)</p>
+                <button class="nav-btn" onclick="buyItem('shd')">購買 (戰鬥中按 G 無敵 3s)</button>
+            </div>
+            <div class="shop-item">
+                <p>自動防禦砲塔 ($1500)</p>
+                <button class="nav-btn" onclick="buyItem('turret')">安裝系統</button>
+            </div>
+            <div class="shop-item">
+                <p>商店裝修 ($2000)</p>
+                <button class="nav-btn" onclick="changeTheme()">切換霓虹風格</button>
+            </div>
+            <div class="shop-item">
+                <p>購買星際新聞 ($100)</p>
+                <button class="nav-btn" onclick="buyNews()">獲取最新情報</button>
+            </div>
+        </div>
+    </div>
+
+
+    <div id="weapon-panel" class="panel">
+        <h2>--- 武器整備系統 ---</h2>
+        <p>目前威力：<span id="atk-val">10</span></p>
+        <button class="nav-btn" onclick="upgradeWeapon()">花費 $500 提升火力</button>
+    </div>
+
+
+    <div id="inventory-panel" class="panel">
+        <h2>--- 個人背包 ---</h2>
+        <p>自動翻譯機：已安裝</p>
+        <p>急救藥包：<span id="kit-count">0</span></p>
+        <p>防護罩插件：<span id="shd-count">0</span></p>
+    </div>
+
+
+    <div id="battle-panel" class="panel" style="padding:0;">
+        <div id="battle-ui">HP: <span id="hp-val">100</span> | ⏱️: <span id="timer-val">45</span> | 盾: <span id="shd-active">關閉</span></div>
+        <canvas id="gameCanvas" width="800" height="450"></canvas>
+    </div>
+</div>
+
+
+<script>
+// --- 核心資料 ---
+let money = 1000, atk = 10, kits = 0, shds = 0, hasTurret = false, shieldTimer = 0;
+let gameActive = false, battleTimer = 45, timerInterval;
+
+
+// [重要] 請在此替換你的 API KEY
+const API_KEY = "AIzaSyDPtrD2aYZbD8uKAeSxx4sxZI6iVVR6jp4";
+const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${API_KEY}`;
+
+
+// --- 介面控制 ---
+function showPanel(id) {
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    gameActive = (id === 'battle-panel');
+    if(gameActive) startBattle();
+}
+
+
+function updateUI() {
+    document.getElementById('money-val').innerText = money;
+    document.getElementById('atk-val').innerText = atk;
+    document.getElementById('kit-val').innerText = kits;
+    document.getElementById('kit-count').innerText = kits;
+    document.getElementById('shd-val').innerText = shds;
+    document.getElementById('shd-count').innerText = shds;
+    document.getElementById('turret-val').innerText = hasTurret ? "已安裝" : "無";
+}
+
+
+// --- 商店功能 ---
+function buyItem(type) {
+    if(type==='kit' && money>=200) { money-=200; kits++; }
+    else if(type==='shd' && money>=300) { money-=300; shds++; }
+    else if(type==='turret' && money>=1500) { money-=1500; hasTurret=true; }
+    else { alert("錢不夠或條件不符！"); return; }
+    updateUI();
+}
+
+
+function changeTheme() {
+    if(money>=2000) { money-=2000; document.body.classList.toggle('theme-purple'); updateUI(); }
+}
+
+
+async function buyNews() {
+    if(money>=100) {
+        money-=100; updateUI();
+        talkToGemini("請告訴我一些關於宇宙戰爭或黑市交易的最新情報。");
+    }
+}
+
+
+function upgradeWeapon() {
+    if(money>=500) { money-=500; atk+=5; updateUI(); }
+}
+
+
+// --- 戰鬥與畫布系統 ---
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const player = { x: 50, y: 350, w: 30, h: 45, vy: 0, hp: 100, grounded: true };
+const bullets = [], enemies = [], keys = {};
+
+
+window.onkeydown = e => {
+    keys[e.code] = true;
+    if(e.code === 'KeyZ' && gameActive) shoot();
+    if(e.code === 'KeyH' && gameActive && kits>0) { player.hp=Math.min(100, player.hp+30); kits--; updateUI(); }
+    if(e.code === 'KeyG' && gameActive && shds>0) { shieldTimer=180; shds--; updateUI(); }
+};
+window.onkeyup = e => keys[e.code] = false;
+
+
+function shoot() { bullets.push({ x: player.x+30, y: player.y+20, w:10, h:4, speed:12 }); }
+
+
+function startBattle() {
+    player.hp = 100; battleTimer = 45; enemies.length = 0; bullets.length = 0;
+    document.getElementById('hp-val').innerText = player.hp;
+    clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+        battleTimer--;
+        document.getElementById('timer-val').innerText = battleTimer;
+        if(battleTimer <= 0) endBattle("外星人撤退了！");
+    }, 1000);
+    requestAnimationFrame(loop);
+}
+
+
+function endBattle(msg) {
+    gameActive = false;
+    clearInterval(timerInterval);
+    document.body.classList.remove('danger-mode'); // 恢復正常光線
+    alert(msg);
+    showPanel('chat-panel');
+}
+
+
+function loop() {
+    if(!gameActive) return;
+    // 物理移動
+    if(keys['ArrowLeft']) player.x -= 6;
+    if(keys['ArrowRight']) player.x += 6;
+    if(keys['ArrowUp'] && player.grounded) { player.vy = -12; player.grounded = false; }
+    player.vy += 0.6; player.y += player.vy;
+    if(player.y > 350) { player.y = 350; player.vy = 0; player.grounded = true; }
+
+
+    // 自動砲塔邏輯
+    if(hasTurret && Math.random() < 0.05) shoot();
+
+
+    // 子彈處理
+    for(let i = bullets.length - 1; i >= 0; i--) {
+        bullets[i].x += bullets[i].speed;
+        if(bullets[i].x > 800) bullets.splice(i, 1);
+    }
+
+
+    // 敵人處理與碰撞
+    if(Math.random() < 0.04) enemies.push({ x:800, y:Math.random()>0.5?350:250, w:30, h:30 });
+   
+    for(let ei = enemies.length - 1; ei >= 0; ei--) {
+        let en = enemies[ei];
+        en.x -= 5;
+
+
+        // 玩家碰撞敵人
+        if(hit(player, en)) {
+            if(shieldTimer <= 0) {
+                player.hp -= 15;
+                document.getElementById('hp-val').innerText = player.hp;
+            }
+            enemies.splice(ei, 1);
+            if(player.hp <= 0) { endBattle("防線崩潰！"); return; }
+            continue;
+        }
+
+
+        // 子彈碰撞敵人
+        for(let bi = bullets.length - 1; bi >= 0; bi--) {
+            if(hit(bullets[bi], en)) {
+                enemies.splice(ei, 1);
+                bullets.splice(bi, 1);
+                money += 30;
+                updateUI();
+                break;
+            }
+        }
+    }
+
+
+    if(shieldTimer > 0) shieldTimer--;
+    document.getElementById('shd-active').innerText = shieldTimer > 0 ? "啟動" : "關閉";
+
+
+    draw();
+    requestAnimationFrame(loop);
+}
+
+
+function draw() {
+    ctx.clearRect(0, 0, 800, 450);
+    ctx.fillStyle="#333"; ctx.fillRect(0, 395, 800, 55);
+   
+    // 玩家
+    ctx.fillStyle = shieldTimer > 0 ? "cyan" : (atk >= 20 ? "magenta" : "blue");
+    ctx.fillRect(player.x, player.y, player.w, player.h);
+    if(shieldTimer > 0) { ctx.strokeStyle = "white"; ctx.strokeRect(player.x-5, player.y-5, player.w+10, player.h+10); }
+   
+    // 子彈與敵人
+    ctx.fillStyle = "yellow"; bullets.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
+    ctx.fillStyle = "red"; enemies.forEach(en => ctx.fillRect(en.x, en.y, en.w, en.h));
+}
+
+
+function hit(a, b) { return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
+
+
+// --- AI 通訊系統 ---
+async function talkToGemini(customPrompt) {
+    const input = document.getElementById('player-input');
+    const text = customPrompt || input.value;
+    if(!text) return;
+
+
+    appendMsg('player-msg', "你: " + text);
+    input.value = "";
+
+
+    // 準備傳送給 AI 的 Prompt
+    const systemPrompt = `你是一個末日太空站「404號站」的外星商販，脾氣陰晴不定。玩家現在跟你說：'${text}'。請回答玩家，並在回答的最後嚴格遵守格式附帶 [ANGRY:0-100] 的數值。若數值大於 90 你會開火。`;
+
+
+    try {
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: systemPrompt }] }]
+            })
+        });
+
+
+        const data = await response.json();
+        const aiText = data.candidates[0].content.parts[0].text;
+        appendMsg('npc-msg', "外星人: " + aiText);
+
+
+        // 解析憤怒值
+        const angryMatch = aiText.match(/\[ANGRY:(\d+)\]/);
+        if (angryMatch) {
+            const angryVal = parseInt(angryMatch[1]);
+           
+            // 邏輯判斷：高於 80 閃紅燈，高於 90 進入戰鬥
+            if (angryVal >= 80) {
+                document.body.classList.add('danger-mode');
+                if (angryVal >= 90) {
+                    appendMsg('npc-msg', "系統：警告！外星人發起攻擊！");
+                    setTimeout(() => { showPanel('battle-panel'); }, 1500);
+                }
+            } else {
+                document.body.classList.remove('danger-mode');
+            }
+        }
+    } catch(e) {
+        appendMsg('npc-msg', "系統：通訊雜訊... (請確認 API Key 是否正確)");
+        console.error(e);
+    }
+}
+
+
+function appendMsg(cls, txt) {
+    const box = document.getElementById('chat-box');
+    const d = document.createElement('div'); d.className = cls; d.innerText = txt;
+    box.appendChild(d);
+    box.scrollTop = box.scrollHeight;
+}
+</script>
+
+
+</body>
+</html>
